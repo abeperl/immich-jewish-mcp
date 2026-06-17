@@ -1,0 +1,62 @@
+# Throwaway Immich instance for KolAlbum MCP QA / integration testing.
+# Usage:
+#   cd immich-test-env && docker compose up -d
+#   # Wait ~30 s for server to be ready, then run setup:
+#   ../scripts/qa-bootstrap.sh
+#   # Run integration / QA gate tests:
+#   cd .. && IMMICH_BASE_URL=http://localhost:2283 IMMICH_API_KEY=<key> npm run test:qa
+#   # Tear down (removes volumes too):
+#   docker compose down -v
+
+name: immich-mcp-qa
+
+services:
+  immich-server:
+    container_name: immich-mcp-qa-server
+    image: ghcr.io/immich-app/immich-server:release
+    environment:
+      - DB_HOSTNAME=postgres
+      - DB_USERNAME=immich
+      - DB_PASSWORD=immich
+      - DB_DATABASE_NAME=immich
+      - REDIS_HOSTNAME=redis
+      # Disable ML to keep it lightweight for QA
+      - IMMICH_MACHINE_LEARNING_URL=
+    ports:
+      - "2283:2283"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    container_name: immich-mcp-qa-postgres
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.3.0-pgvectors0.2.0
+    environment:
+      POSTGRES_DB: immich
+      POSTGRES_USER: immich
+      POSTGRES_PASSWORD: immich
+    volumes:
+      - immich-qa-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U immich -d immich"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    container_name: immich-mcp-qa-redis
+    image: redis:7-alpine
+    volumes:
+      - immich-qa-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  immich-qa-pgdata:
+  immich-qa-redis:

@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# Bootstrap a fresh throwaway Immich QA instance:
+# 1. Create admin user
+# 2. Log in and get bearer token
+# 3. Create an API key
+# 4. Upload 6 synthetic test photos with lifecycle-relevant filenames
+# 5. Print the API key (caller can export IMMICH_API_KEY=...)
+#
+# Usage:
+#   cd immich-jewish-mcp
+#   ./scripts/qa-bootstrap.sh
+#
+# Requirements: curl, jq, and a running immich-test-env (docker compose up -d)
+
+set -euo pipefail
+
+BASE_URL="${IMMICH_BASE_URL:-http://localhost:2283}"
+ADMIN_EMAIL="qa-admin@mcp-test.local"
+ADMIN_PASSWORD="QA_immich_2026!"
+ADMIN_NAME="QA Admin"
+
+echo "==> Waiting for Immich to be ready at $BASE_URL ..."
+for i in $(seq 1 60); do
+  if curl -sf "${BASE_URL}/api/server-info/ping" -o /dev/null 2>/dev/null; then
+    echo "    Immich is up (attempt $i)"
+    break
+  fi
+  if [ "$i" -eq 60 ]; then
+    echo "ERROR: Immich not ready after 60 attempts. Is docker compose up?" >&2
+    exit 1
+  fi
+  sleep 2
+done
+
+echo "==> Creating admin user ..."
+ADMIN_RESP=$(curl -sf -X POST "${BASE_URL}/api/auth/admin-sign-up" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\",\"name\":\"${ADMIN_NAME}\"}" \
+  2>/dev/null || echo '{"error":"already_exists"}')
+
+if echo "$ADMIN_RESP" | grep -q '"error"'; then
+  echo "    Admin already exists or sign-up failed: $ADMIN_RESP"
+fi
+
+echo "==> Logging in ..."
+LOGIN_RESP=$(curl -sf -X POST "${BASE_URL}/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}")
+ACCESS_TOKEN=$(echo "$LOGIN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
+
+echo "==> Creating API key ..."
+KEY_RESP=$(curl -sf -X POST "${BASE_URL}/api/api-keys" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -d '{"name":"MCP QA Key"}')
+API_KEY=$(echo "$KEY_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['secret'])")
+
+echo ""
+echo "==> Uploading synthetic test photos ..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FIXTURES_DIR="${SCRIPT_DIR}/../test-fixtures"
+
+# Create a minimal valid JPEG (1x1 white pixel) if not already present
+mkdir -p "$FIXTURES_DIR"
+
+# Minimal JPEG bytes for a 1x1 white pixel
+create_minimal_jpeg() {
+  local path="$1"
+  if [ ! -f "$path" ]; then
+    # Write a minimal JPEG via python (always available)
+    python3 - <<PYEOF
+import struct, os
+path = "${path}"
+# Minimal JPEG: SOI + APP0 + SOF0 + DHT + SOS + EOI for 1x1 white pixel
+data = bytes([
+    0xff,0xd8,                           # SOI
+    0xff,0xe0,0x00,0x10,                 # APP0 marker + length 16
+    0x4a,0x46,0x49,0x46,0x00,            # JFIF\0
+    0x01,0x01,0x00,0x00,0x01,0x00,0x01,  # version + aspect + density
+    0x00,0x00,                           # thumbnail 0x0
+    0xff,0xdb,0x00,0x43,0x00,            # DQT marker
+    0x10,0x0b,0x0c,0x0e,0x0c,0x0a,0x10,0x0e,
+    0x0d,0x0e,0x12,0x11,0x10,0x13,0x18,0x28,
+    0x1a,0x18,0x16,0x16,0x18,0x31,0x23,0x25,
+    0x1d,0x28,0x3a,0x33,0x3d,0x3c,0x39,0x33,
+    0x38,0x37,0x40,0x48,0x5c,0x4e,0x40,0x44,
+    0x57,0x45,0x37,0x38,0x50,0x6d,0x51,0x57,
+    0x5f,0x62,0x67,0x68,0x67,0x3e,0x4d,0x71,
+    0x79,0x70,0x64,0x78,0x5c,0x65,0x67,0x63,
+    0xff,0xc0,0x00,0x0b,0x08,0x00,0x01,0x00,0x01,0x01,0x01,0x11,0x00,  # SOF0 1x1
+    0xff,0xc4,0x00,0x1f,0x00,             # DHT DC
+    0x00,0x01,0x05,0x01,0x01,0x01,0x01,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,
+    0xff,0xc4,0x00,0xb5,0x10,             # DHT AC
+    0x00,0x02,0x01,0x03,0x03,0x02,0x04,0x03,0x05,0x05,0x04,0x04,0x00,0x00,0x01,0x7d,
+    0x01,0x02,0x03,0x00,0x04,0x11,0x05,0x12,0x21,0x31,0x41,0x06,0x13,0x51,0x61,0x07,
+    0x22,0x71,0x14,0x32,0x81,0x91,0xa1,0x08,0x23,0x42,0xb1,0xc1,0x15,0x52,0xd1,0xf0,
+    0x24,0x33,0x62,0x72,0x82,0x09,0x0a,0x16,0x17,0x18,0x19,0x1a,0x25,0x26,0x27,0x28,
+    0x29,0x2a,0x34,0x35,0x36,0x37,0x38,0x39,0x3a,0x43,0x44,0x45,0x46,0x47,0x48,0x49,
+    0x4a,0x53,0x54,0x55,0x56,0x57,0x58,0x59,0x5a,0x63,0x64,0x65,0x66,0x67,0x68,0x69,
+    0x6a,0x73,0x74,0x75,0x76,0x77,0x78,0x79,0x7a,0x83,0x84,0x85,0x86,0x87,0x88,0x89,
+    0x8a,0x92,0x93,0x94,0x95,0x96,0x97,0x98,0x99,0x9a,0xa2,0xa3,0xa4,0xa5,0xa6,0xa7,
+    0xa8,0xa9,0xaa,0xb2,0xb3,0xb4,0xb5,0xb6,0xb7,0xb8,0xb9,0xba,0xc2,0xc3,0xc4,0xc5,
+    0xc6,0xc7,0xc8,0xc9,0xca,0xd2,0xd3,0xd4,0xd5,0xd6,0xd7,0xd8,0xd9,0xda,0xe1,0xe2,
+    0xe3,0xe4,0xe5,0xe6,0xe7,0xe8,0xe9,0xea,0xf1,0xf2,0xf3,0xf4,0xf5,0xf6,0xf7,0xf8,
+    0xf9,0xfa,
+    0xff,0xda,0x00,0x08,0x01,0x01,0x00,0x00,0x3f,0x00,  # SOS
+    0xfb,0xd7,0xfe,0xfb,                                  # compressed data (white pixel)
+    0xff,0xd9                                              # EOI
+])
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(path, 'wb') as f:
+    f.write(data)
+print(f"Created {path}")
+PYEOF
+  fi
+}
+
+PHOTOS=(
+  "bar_mitzvah_aliyah_levi_2023.jpg"
+  "bris_baby_shmuel_2022.jpg"
+  "pesach_seder_plate_2024.jpg"
+  "chanukah_menorah_lighting_2023.jpg"
+  "vort_engagement_rivka_2024.jpg"
+  "IMG_generic_photo_no_lifecycle.jpg"
+)
+
+for filename in "${PHOTOS[@]}"; do
+  create_minimal_jpeg "${FIXTURES_DIR}/${filename}"
+done
+
+echo "    Test fixtures created at ${FIXTURES_DIR}/"
+
+UPLOAD_IDS=()
+for filename in "${PHOTOS[@]}"; do
+  FILEPATH="${FIXTURES_DIR}/${filename}"
+  FILESIZE=$(stat -c%s "$FILEPATH" 2>/dev/null || stat -f%z "$FILEPATH")
+  UPLOAD_RESP=$(curl -sf -X POST "${BASE_URL}/api/assets" \
+    -H "x-api-key: ${API_KEY}" \
+    -F "assetData=@${FILEPATH};type=image/jpeg" \
+    -F "deviceAssetId=${filename}" \
+    -F "deviceId=mcp-qa-test" \
+    -F "fileCreatedAt=2023-09-15T10:00:00.000Z" \
+    -F "fileModifiedAt=2023-09-15T10:00:00.000Z" \
+    2>/dev/null || echo '{"id":"upload_failed"}')
+  ASSET_ID=$(echo "$UPLOAD_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id','?'))" 2>/dev/null || echo "?")
+  echo "    Uploaded ${filename} → asset id: ${ASSET_ID}"
+  UPLOAD_IDS+=("$ASSET_ID")
+done
+
+echo ""
+echo "================================================="
+echo "QA instance ready:"
+echo "  IMMICH_BASE_URL=${BASE_URL}"
+echo "  IMMICH_API_KEY=${API_KEY}"
+echo ""
+echo "Export and run QA gate tests:"
+echo "  export IMMICH_BASE_URL=${BASE_URL}"
+echo "  export IMMICH_API_KEY=${API_KEY}"
+echo "  npm run test:qa"
+echo "================================================="
+
+# Write env file for test scripts to source
+ENV_FILE="${SCRIPT_DIR}/../immich-test-env/.qa.env"
+cat > "$ENV_FILE" <<ENV
+IMMICH_BASE_URL=${BASE_URL}
+IMMICH_API_KEY=${API_KEY}
+ENV
+echo "  (env saved to immich-test-env/.qa.env)"

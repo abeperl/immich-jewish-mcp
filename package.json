@@ -1,0 +1,60 @@
+{
+  "name": "immich-jewish-mcp",
+  "version": "1.0.0",
+  "description": "BYO MCP server for organizing Immich photos by Jewish lifecycle events",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abeperl/immich-jewish-mcp.git"
+  },
+  "homepage": "https://github.com/abeperl/immich-jewish-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/abeperl/immich-jewish-mcp/issues"
+  },
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "immich-jewish-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc && chmod +x dist/index.js",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js",
+    "lint": "tsc --noEmit",
+    "test": "npm run build && node --test 'dist/*.test.js' 'dist/**/*.test.js'",
+    "test:qa": "npm run build && node --test dist/qa-gate.test.js",
+    "test:integration": "npm run build && IMMICH_BASE_URL=${IMMICH_BASE_URL} IMMICH_API_KEY=${IMMICH_API_KEY} node --test dist/qa-gate.test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "immich",
+    "photos",
+    "jewish",
+    "lifecycle",
+    "albums",
+    "claude",
+    "kol-album",
+    "self-hosted",
+    "byo"
+  ],
+  "author": "Abe Perl",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.13",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "SPEC.md",
+    "README.md",
+    "LICENSE"
+  ]
+}
