@@ -20,7 +20,7 @@
     "start": "node dist/index.js",
     "dev": "tsc && node dist/index.js",
     "lint": "tsc --noEmit",
-    "test": "npm run build && node --test 'dist/*.test.js' 'dist/**/*.test.js'",
+    "test": "npm run build && node --test $(find dist -name '*.test.js' | sort)",
     "test:qa": "npm run build && node --test dist/qa-gate.test.js",
     "test:integration": "npm run build && IMMICH_BASE_URL=${IMMICH_BASE_URL} IMMICH_API_KEY=${IMMICH_API_KEY} node --test dist/qa-gate.test.js",
     "prepublishOnly": "npm run build"
