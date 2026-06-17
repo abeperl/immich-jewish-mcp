@@ -4,7 +4,7 @@
   "description": "BYO MCP server for organizing Immich photos by Jewish lifecycle events",
   "repository": {
     "type": "git",
-    "url": "https://github.com/abeperl/immich-jewish-mcp.git"
+    "url": "git+https://github.com/abeperl/immich-jewish-mcp.git"
   },
   "homepage": "https://github.com/abeperl/immich-jewish-mcp#readme",
   "bugs": {

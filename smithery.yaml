@@ -1,0 +1,26 @@
+# Smithery configuration: https://smithery.ai/docs/config#smitheryyaml
+# KolAlbum MCP — Jewish lifecycle photo organizer for self-hosted Immich
+
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - immichBaseUrl
+      - immichApiKey
+    properties:
+      immichBaseUrl:
+        type: string
+        description: "Your Immich server base URL (e.g. https://photos.example.com)"
+      immichApiKey:
+        type: string
+        description: "Your Immich API key (create one in Immich → Account Settings → API Keys)"
+  commandFunction: |-
+    config => ({
+      command: 'npx',
+      args: ['-y', 'immich-jewish-mcp'],
+      env: {
+        IMMICH_BASE_URL: config.immichBaseUrl,
+        IMMICH_API_KEY: config.immichApiKey,
+      },
+    })
